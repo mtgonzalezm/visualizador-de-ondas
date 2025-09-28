@@ -67,7 +67,7 @@ def check_answer(user_answer):
 # --- Interfaz del Juego ---
 st.title("👂 Juego: Las Partes del Oído")
 
-image_path = "PARTES_OÍDO.jpg"
+image_path = "PARTES_OIDO.jpg"
 if not os.path.exists(image_path):
     st.error(f"Error: La imagen '{image_path}' no se encuentra. Asegúrate de que esté guardada en la misma carpeta que el script.")
 else:
