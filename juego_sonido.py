@@ -1,18 +1,18 @@
 import streamlit as st
 import numpy as np
-import sounddevice as sd
 import random
-import time
+import io
+from scipy.io.wavfile import write as write_wav # Importación clave para crear archivos WAV
+import os 
 
 # --- Configuración de la página ---
-st.set_page_config(page_title="Juego de Sonido", layout="centered")
+st.set_page_config(page_title="Juego del Sonido", layout="centered")
 
-# --- Estilos Personalizados (CSS) ---
+# --- Estilos Personalizados ---
 COLOR_FONDO = "#FFF5F2"
 COLOR_TEXTO = "#064232"
 COLOR_ACENTO = "#568F87"
 COLOR_SECUNDARIO = "#F5BABB"
-
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {COLOR_FONDO}; }}
@@ -28,78 +28,127 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# --- TÍTULO DE VERIFICACIÓN ---
-st.title("🎵 Juego de Sonido (VERSIÓN CORREGIDA)")
-st.write("¡Escucha con atención y adivina la cualidad del sonido misterioso!")
+# --- Configuración del Audio ---
+SAMPLE_RATE = 44100 # Muestras por segundo
+DURACION_SONIDO = 1.0 # Duración en segundos
 
-# --- Inicialización del estado del juego ---
-if 'correct_answer' not in st.session_state:
-    st.session_state.correct_answer = ""
-    st.session_state.question = ""
+# --- Clasificación de Sonidos para el Juego ---
+CUALIDADES = {
+    "ALTURA (Frecuencia)": {
+        "GRAVE": (150, 250), # Tono bajo
+        "AGUDO": (500, 800)  # Tono alto
+    },
+    "INTENSIDAD (Amplitud)": {
+        "SUAVE": (0.1, 0.3), # Sonido suave
+        "FUERTE": (0.6, 0.9) # Sonido fuerte
+    }
+}
+
+# --- FUNCIÓN DE AUDIO CORREGIDA (SOLUCIÓN AL PortAudioError) ---
 
 def play_sound(frecuencia, amplitud, duracion):
-    sample_rate = 44100
-    puntos_audio = int(duracion * sample_rate)
-    tiempo = np.linspace(0, duracion, puntos_audio, endpoint=False)
-    onda = amplitud * np.sin(2 * np.pi * frecuencia * tiempo)
-    sd.play(onda.astype(np.float32), sample_rate)
-    time.sleep(duracion)
+    """
+    Genera una onda sinusoidal, la convierte a WAV y la reproduce con st.audio.
+    """
+    t = np.linspace(0, duracion, int(SAMPLE_RATE * duracion), endpoint=False)
+    # Generación de la onda
+    onda = amplitud * np.sin(2 * np.pi * frecuencia * t)
+    
+    # 1. Crear un búfer en memoria (archivo temporal en RAM)
+    buffer = io.BytesIO()
+    
+    # 2. Escribir el audio en el búfer como un archivo WAV de 16-bit
+    # Normalizamos (multiplicamos por 32767) y convertimos a int16 para el formato WAV
+    escala_16bit = 32767
+    audio_data = (onda * escala_16bit).astype(np.int16)
+    write_wav(buffer, SAMPLE_RATE, audio_data) 
+    
+    # 3. Mover el "cursor" al inicio del búfer
+    buffer.seek(0)
+    
+    # 4. Reproducir el audio usando la función de Streamlit
+    st.audio(buffer.read(), format='audio/wav')
 
 def generate_new_question():
-    question_type = random.choice(['tono', 'duracion', 'intensidad'])
-    frecuencia, amplitud, duracion = 440, 0.7, 0.8
+    """Selecciona una cualidad y un valor (ej: Altura y Agudo) al azar."""
+    cualidad_key, cualidad_params = random.choice(list(CUALIDADES.items()))
+    valor_key, (min_val, max_val) = random.choice(list(cualidad_params.items()))
+    
+    # Seleccionamos la variable que se va a modificar
+    if cualidad_key == "ALTURA (Frecuencia)":
+        # Altura: Frecuencia variable, Amplitud fija (ej: 0.7)
+        frecuencia = random.randint(min_val, max_val)
+        amplitud = 0.7
+    else: # INTENSIDAD (Amplitud)
+        # Intensidad: Amplitud variable, Frecuencia fija (ej: 440 Hz)
+        frecuencia = 440
+        amplitud = random.uniform(min_val, max_val)
 
-    if question_type == 'tono':
-        st.session_state.question = "¿El sonido es AGUDO o GRAVE?"
-        is_high = random.choice([True, False])
-        if is_high:
-            frecuencia = 880
-            st.session_state.correct_answer = "Agudo"
-        else:
-            frecuencia = 220
-            st.session_state.correct_answer = "Grave" # <-- La palabra correcta
-    elif question_type == 'duracion':
-        st.session_state.question = "¿El sonido es LARGO o CORTO?"
-        is_long = random.choice([True, False])
-        if is_long:
-            duracion = 1.5
-            st.session_state.correct_answer = "Largo"
-        else:
-            duracion = 0.3
-            st.session_state.correct_answer = "Corto"
-    elif question_type == 'intensidad':
-        st.session_state.question = "¿El sonido es FUERTE o DÉBIL?"
-        is_loud = random.choice([True, False])
-        if is_loud:
-            amplitud = 0.9
-            st.session_state.correct_answer = "Fuerte"
-        else:
-            amplitud = 0.2
-            st.session_state.correct_answer = "Débil"
+    # Guarda la información de la pregunta en el estado de la sesión
+    st.session_state.correct_answer = valor_key
+    st.session_state.question_type = cualidad_key
+    st.session_state.frecuencia = frecuencia
+    st.session_state.amplitud = amplitud
+    st.session_state.feedback = ""
+    
+    # Reproduce el sonido
+    play_sound(frecuencia, amplitud, DURACION_SONIDO)
 
-    play_sound(frecuencia, amplitud, duracion)
+
+# --- LÓGICA DEL JUEGO ---
 
 def check_answer(user_answer):
+    """Comprueba la respuesta del usuario."""
     if user_answer == st.session_state.correct_answer:
-        st.success(f"¡Correcto! La respuesta era {st.session_state.correct_answer}.")
+        st.session_state.feedback = f"¡Correcto! ✅ El sonido era: **{st.session_state.correct_answer}**."
+        st.success(st.session_state.feedback)
         st.balloons()
-        st.session_state.question = "" 
     else:
-        st.error("¡Incorrecto! Prueba a generar otro sonido.")
+        st.session_state.feedback = f"¡Incorrecto! ❌ La respuesta correcta era: **{st.session_state.correct_answer}**."
+        st.error(st.session_state.feedback)
+    
+    # Después de responder, preparamos la interfaz para la siguiente pregunta
+    st.session_state.game_active = False
 
-if st.button("🔊 Generar Sonido Misterioso"):
-    generate_new_question()
+# --- Inicialización del estado de la sesión ---
+if 'game_active' not in st.session_state:
+    st.session_state.game_active = False
+    st.session_state.feedback = "Pulsa 'Empezar' para escuchar el primer sonido."
+    st.session_state.correct_answer = ""
+    st.session_state.question_type = ""
 
-if st.session_state.question:
-    st.subheader(st.session_state.question)
-    options = st.session_state.question.split("¿El sonido es ")[1].split(" o ")
-    option1 = options[0].replace("?", "").strip().capitalize()
-    option2 = options[1].replace("?", "").strip().capitalize()
+# --- Interfaz de Usuario ---
+st.title("🎵 Juego de Sonido")
+st.subheader("¡Escucha con atención y adivina la cualidad del sonido misterioso!")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button(option1, use_container_width=True):
-            check_answer(option1)
-    with col2:
-        if st.button(option2, use_container_width=True):
-            check_answer(option2)
+if not st.session_state.game_active:
+    st.markdown("---")
+    if st.button("▶️ Empezar / Siguiente Sonido", use_container_width=True):
+        st.session_state.game_active = True
+        generate_new_question()
+        st.rerun()
+    
+    st.info(st.session_state.feedback)
+    st.markdown("---")
+
+else:
+    st.markdown(f"**Cualidad a adivinar:** {st.session_state.question_type}")
+    st.markdown("---")
+    
+    # Opciones de respuesta para la cualidad actual
+    opciones = list(CUALIDADES[st.session_state.question_type].keys())
+    random.shuffle(opciones)
+    
+    st.info("👂 **Vuelve a escuchar el sonido** (si es necesario):")
+    if st.button("Repetir Sonido", key="repeat_sound"):
+        play_sound(st.session_state.frecuencia, st.session_state.amplitud, DURACION_SONIDO)
+    
+    # Muestra la pregunta y las opciones
+    st.subheader("¿Cómo describirías este sonido según su **{}**?".format(st.session_state.question_type.split(' ')[0]))
+    
+    cols = st.columns(len(opciones))
+    for i, opcion in enumerate(opciones):
+        with cols[i]:
+            if st.button(opcion, key=f"op_{opcion}", use_container_width=True):
+                check_answer(opcion)
+                st.rerun()
