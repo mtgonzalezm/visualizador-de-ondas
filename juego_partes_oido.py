@@ -1,5 +1,4 @@
 import streamlit as st
-from PIL import Image
 import random
 import os
 
@@ -27,8 +26,6 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- Contenido y respuestas basadas en tu imagen ---
-# Clave: número en tu imagen, Valor: Nombre de la parte del oído
-# NOTA: Basado en el diagrama, asumimos que el 4 es la Cóclea. El Yunque no está numerado.
 PARTES_OIDO_CON_NUMEROS = {
     1: "Oído externo (Oreja)",
     2: "Tímpano",
@@ -67,8 +64,12 @@ def check_answer(user_answer):
 # --- Interfaz del Juego ---
 st.title("👂 Juego: Las Partes del Oído")
 
-image_path = "PARTES_OIDO.jpg"
+# *** LÍNEA CORREGIDA PARA EL NOMBRE DE ARCHIVO EN MINÚSCULAS ***
+image_path = "partes_oido.jpg"
+# ***************************************************************
+
 if not os.path.exists(image_path):
+    # Esto ya no debería aparecer en Streamlit Cloud
     st.error(f"Error: La imagen '{image_path}' no se encuentra. Asegúrate de que esté guardada en la misma carpeta que el script.")
 else:
     st.image(image_path, caption="Identifica la parte del oído señalada")
